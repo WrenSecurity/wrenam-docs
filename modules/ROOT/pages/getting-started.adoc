@@ -1,0 +1,12 @@
+= Getting Started
+
+You can get Wren:AM Web Application Archive (WAR) in couple of ways:
+
+== Download binary release
+
+The easiest way to get the Wren:AM is to download the latest binary https://github.com/WrenSecurity/wrenam/releases[release^].
+
+== Build the source code
+
+You can also create your own build from the source code.
+Manual how to build the source code can be found https://github.com/wrenSecurity/wrenam#build-the-source-code[here^].

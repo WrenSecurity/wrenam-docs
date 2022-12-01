@@ -1,0 +1,4 @@
+= Links
+
+* For questions and general discussion, please use https://gitter.im/WrenSecurity/Lobby[Gitter channel^].
+* Follow the progress on the https://github.com/WrenSecurity/wrenam[GitHub repository^].
