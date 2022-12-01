@@ -1,0 +1,7 @@
+= Wren:AM
+
+Wren:AM is an "all-in-one" access management solution providing strong and adaptive authentication, authorization, single sign-on (SSO), entitlements, federation and web services security.
+
+Wren:AM provides mobile support out of the box, with full OAuth 2.0 and OpenID Connect (OIDC) support - modern protocols that provide the most efficient method for developing secure native or web-based mobile applications optimized for bandwidth and CPU.
+
+Wren:AM is one of the projects in the Wren Security Suite, a community initiative that adopted open‐source projects formerly developed by ForgeRock, which has its own roots in Sun Microsystems’ products.
