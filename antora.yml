@@ -1,6 +1,8 @@
 name: wrenam
 title: Wren:AM
-version: 0.0.1
+version: 15.x.x
 start_page: ROOT:index.adoc
 nav:
-- modules/ROOT/nav.adoc
+- modules/ROOT/nav-intro.adoc
+- modules/components/nav.adoc
+- modules/ROOT/nav-other.adoc
