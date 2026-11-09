@@ -1,0 +1,50 @@
+= Token Introspection
+
+The OAuth 2.0 token introspection endpoint, described in https://www.rfc-editor.org/rfc/rfc7662.html[RFC 7662], lets a client check the status of an access or refresh token and obtain information about an active token.
+The endpoint is available at `/oauth2/introspect` within the Wren:AM deployment.
+
+By default, a client can introspect its own tokens.
+To allow a resource server to introspect tokens issued to other clients, configure a confidential OAuth 2.0 client for the resource server in the same realm and add `am-introspect-all-tokens` to its *Scope(s)* (allowed scopes).
+The permission applies to access and refresh tokens issued to clients in that realm.
+
+The scope is reserved for client authorization and cannot be configured in the OAuth2 provider's *Supported Scopes* or *Default Client Scopes*, so clients cannot obtain it through dynamic registration.
+Adding the scope only to the client's default scopes does not grant this permission.
+
+== Introspect a token
+
+The following example introspects a token in the root realm using the resource server client's credentials:
+
+[source,shell]
+----
+curl --request POST 'https://am.example.com/auth/oauth2/introspect' \
+  --user 'resource-server:client-secret' \
+  --data-urlencode 'token=ACCESS_TOKEN'
+----
+
+Replace the URL, client credentials, and token with values for your deployment.
+Use the endpoint for the token's realm when working with a non-root realm.
+
+For an active token that the client is authorized to introspect, the JSON response includes `"active": true` and token information.
+
+[source,json]
+----
+{
+  "active": true,
+  "scope": "profile",
+  "client_id": "application-client",
+  "user_id": "demo",
+  "token_type": "access_token",
+  "exp": 1800000000,
+  "sub": "demo",
+  "iss": "https://am.example.com/auth/oauth2"
+}
+----
+
+For an inactive token, an unknown token, or a token the client is not authorized to introspect, the response contains `"active": false`.
+
+[source,json]
+----
+{
+  "active": false
+}
+----
