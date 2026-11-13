@@ -1,0 +1,181 @@
+= RADIUS Server
+
+Wren:AM can act as a RADIUS server, as described in https://www.rfc-editor.org/rfc/rfc2865.html[RFC 2865].
+Network devices and applications that support RADIUS, such as VPN gateways, Wi-Fi controllers or network equipment, can then authenticate users against Wren:AM.
+Each request is handled by an authentication chain in a realm, so RADIUS clients can use the same authentication as other applications, including multi-factor authentication through Access-Challenge.
+
+To authenticate Wren:AM users against an external RADIUS server instead, see xref:authentication/modules/radius.adoc[].
+
+
+== Server settings
+
+The RADIUS server is configured under menu:Configure[Global Services > RADIUS Server].
+When enabled, every Wren:AM server listens for RADIUS requests on the configured UDP port.
+Changes take effect without a restart: changes to clients apply to the next request, other changes restart the listener.
+
+[cols="2,1,4"]
+|===
+|Setting |Default |Description
+
+|Enabled
+|NO
+|Whether the Wren:AM servers listen for RADIUS requests.
+
+|Listener Port
+|`1812`
+|The UDP port for RADIUS requests, from 1025 to 65535.
+All clients use the same port.
+
+|Thread Pool Core Size
+|`1`
+|The number of threads kept for handling requests, from 1 to 100.
+
+|Thread Pool Max Size
+|`10`
+|The maximum number of threads for handling requests, from 1 to 100.
+Threads beyond the core size are created only when the queue is full.
+
+|Thread Pool Keep-Alive Seconds
+|`10`
+|How long threads beyond the core size are kept when idle, from 1 to 3600 seconds.
+
+|Thread Pool Queue Size
+|`20`
+|The number of requests that can wait for a thread, from 1 to 1000.
+Requests that arrive when the queue is full and all threads are busy are dropped.
+|===
+
+
+== Clients
+
+Each device or application that sends RADIUS requests must be configured as a client.
+Add clients as secondary configurations of the RADIUS Server service.
+Requests from addresses that do not match any client are dropped.
+
+[cols="2,1,4"]
+|===
+|Setting |Default |Description
+
+|Client IP Address
+|`/127.0.0.1`
+|The source IP address of the client's requests, written with a leading slash, for example `/192.0.2.10`.
+The address must match exactly; if in doubt, send a request and copy the address from the "No Defined RADIUS Client matches IP address" message in the debug log.
+
+|Client Secret
+|
+|The secret shared with the client.
+It protects the password in requests and authenticates the responses, and must be configured on the client as well.
+
+|Log Packet Contents for this Client
+|NO
+|Whether the contents of the client's packets are written to the debug log, with passwords masked.
+Use it only for troubleshooting.
+
+|Require Message-Authenticator
+|NO
+|Drop Access-Request packets from the client that do not carry a Message-Authenticator attribute.
+
+|Handler Class
+|`org.forgerock.openam.radius.server.spi.handlers.OpenAMAuthHandler`
+|The class that handles the client's requests.
+See <<handlers>>.
+
+|Handler Class Configuration Properties
+|`realm=/` +
+`chain=ldapService`
+|Configuration of the handler, one `key=value` property per entry.
+|===
+
+[NOTE]
+====
+The Message-Authenticator attribute (https://www.rfc-editor.org/rfc/rfc3579.html#section-3.2[RFC 3579]) protects the integrity of a whole RADIUS packet.
+Without it, an attacker who can intercept the traffic between a client and Wren:AM can forge a response and turn a rejected login into an accepted one (CVE-2024-3596, "Blast-RADIUS").
+
+The server always adds a Message-Authenticator as the first attribute of its responses and always drops requests with an invalid one.
+*Require Message-Authenticator* additionally drops requests without it.
+Enable it once the client sends the attribute in all its Access-Request packets.
+====
+
+
+[[handlers]]
+=== Handlers
+
+The handler class decides how the requests of a client are answered:
+
+`org.forgerock.openam.radius.server.spi.handlers.OpenAMAuthHandler`::
+Authenticates the user with the authentication chain set by the `chain` property in the realm set by the `realm` property.
+This is the handler for production use.
+
+`org.forgerock.openam.radius.server.spi.handlers.AcceptAllHandler`::
+Accepts every request. Use it only for testing the connection between a client and Wren:AM.
+
+`org.forgerock.openam.radius.server.spi.handlers.RejectAllHandler`::
+Rejects every request. Use it only for testing.
+
+Custom handlers implement the `org.forgerock.openam.radius.server.spi.AccessRequestHandler` interface and receive the configuration properties in its `init` method.
+
+
+== Authentication with a chain
+
+The `OpenAMAuthHandler` starts a login with the configured chain and fills the first login stage with the user name and password from the Access-Request.
+The first module of the chain must therefore ask for a user name and a password, for example the LDAP or DataStore module.
+
+Each further stage of the chain is presented to the user as an Access-Challenge.
+The RADIUS client shows the challenge message to the user and sends the user's answer in the password field of the next Access-Request, as RFC 2865 prescribes.
+Answers to choices are option numbers starting at 0; an empty answer selects the default option.
+When the chain completes, the handler responds with an Access-Accept if the login succeeded and with an Access-Reject otherwise.
+
+Modules that need a browser, such as modules that redirect the user or read HTTP headers, cannot be used in a chain for RADIUS clients.
+
+Authentication requests are recorded in the access audit log.
+
+
+== Supported requests
+
+The server answers two kinds of requests from configured clients:
+
+Access-Request::
+Authenticates a user with the client's handler.
+
+Status-Server::
+Lets the client check that the server is alive (https://www.rfc-editor.org/rfc/rfc5997.html[RFC 5997]).
+The server answers with an Access-Accept without authenticating anyone.
+Status-Server requests must carry a valid Message-Authenticator, whatever the client's *Require Message-Authenticator* setting.
+The Wren:AM xref:authentication/modules/radius.adoc[RADIUS authentication module] can use Status-Server for its health check.
+
+All other packets are dropped without a response, as are packets from unknown clients, malformed packets and requests that fail the Message-Authenticator check.
+RADIUS accounting is not supported.
+
+
+== Monitoring
+
+Each Wren:AM server publishes RADIUS server statistics as the JMX MBean `OpenAM:type=RadiusServer`.
+The counters start at zero when the server starts.
+
+[cols="2,4"]
+|===
+|Attribute |Description
+
+|`NumberOfPacketsRecieved`
+|All packets received from any address.
+
+|`NumberOfPacketsProcessed`
+|Packets that were answered, including Status-Server requests.
+
+|`NumberOfPacketsDropped`
+|Packets that were dropped without a response.
+
+|`NumberOfAcceptedPackets`
+|Access-Request packets, including answers to challenges, handled by the `OpenAMAuthHandler`.
+
+|`NumberOfAuthRequestsAccepted`
+|Authentication requests answered with an Access-Accept.
+
+|`NumberOfAuthRequestsRejected`
+|Authentication requests answered with an Access-Reject.
+|===
+
+Every received packet is eventually counted as either processed or dropped.
+A growing number of dropped packets usually means a client with a wrong shared secret, a client that does not send a required Message-Authenticator, requests from an address that is not configured as a client, or a full thread pool queue.
+The reason for each dropped packet is written to the `amRadiusServer` debug log.
+Anyone who can reach the RADIUS port can increase the number of received and dropped packets.

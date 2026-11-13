@@ -2,6 +2,9 @@ name: wrenam
 title: Wren:AM
 version: 15.x.x
 start_page: ROOT:index.adoc
+asciidoc:
+  attributes:
+    experimental: ''
 nav:
 - modules/ROOT/nav-intro.adoc
 - modules/components/nav.adoc

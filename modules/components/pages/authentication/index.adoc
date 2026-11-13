@@ -1,0 +1,53 @@
+= Authentication
+
+The authentication service verifies the identity of users and creates a session for them when they succeed.
+Users authenticate through the XUI login page, applications through the `/json/authenticate` REST endpoint, and network devices such as VPN gateways through the xref:radius-server.adoc[RADIUS server].
+All of them use the same configuration: authentication modules combined into authentication chains.
+
+
+== Modules
+
+An authentication module implements one way of verifying an identity, such as checking a password in a directory, delegating to a RADIUS server or verifying a one-time password.
+Each module presents one or more login stages to the user, for example a form with a user name and a password, followed by a stage for a one-time password.
+
+To use a module, create a module instance in a realm under menu:Authentication[Modules] and configure it.
+A realm can contain several instances of the same module with different settings, for example two RADIUS module instances pointing to different RADIUS servers.
+
+Each module instance has an authentication level.
+The session records the authentication level reached during login, and authorization policies can require a minimum level, for example to protect sensitive resources with stronger authentication.
+
+
+== Chains
+
+An authentication chain combines module instances into a login flow.
+Chains are configured in a realm under menu:Authentication[Chains].
+Each module instance in a chain has a criterion that decides how its result affects the chain:
+
+[cols="1,3"]
+|===
+|Criterion |Effect
+
+|Required
+|The module must succeed. Authentication continues with the next module whether it succeeds or fails, and the chain fails if it failed.
+
+|Requisite
+|The module must succeed. If it fails, authentication stops and the chain fails immediately.
+
+|Sufficient
+|If the module succeeds and no earlier required or requisite module failed, the chain succeeds immediately. If it fails, authentication continues.
+
+|Optional
+|The module does not have to succeed. Authentication continues with the next module either way.
+|===
+
+A chain can also define post-authentication processing classes, which run after a successful or failed login, for example to set session properties.
+
+Each realm has a default chain for users and a default chain for administrators, set in the realm's authentication settings.
+Users log in with the default chain unless they request another chain or module.
+
+
+== Module reference
+
+The following modules are described in this documentation:
+
+* xref:authentication/modules/radius.adoc[]

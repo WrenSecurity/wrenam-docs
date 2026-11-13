@@ -1,3 +1,7 @@
 * xref:index.adoc[]
 ** OAuth 2.0 and OpenID Connect
 *** xref:oauth2/token-introspection.adoc[]
+** xref:authentication/index.adoc[]
+*** Modules
+**** xref:authentication/modules/radius.adoc[]
+** xref:radius-server.adoc[]
