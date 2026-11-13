@@ -1,0 +1,139 @@
+= RADIUS
+
+The RADIUS authentication module delegates the verification of user names and passwords to external RADIUS servers, as described in https://www.rfc-editor.org/rfc/rfc2865.html[RFC 2865].
+Wren:AM acts as a RADIUS client: it sends an Access-Request with the user's credentials and logs the user in when the server answers with an Access-Accept.
+The module supports Access-Challenge, which RADIUS servers use for additional steps such as one-time passwords.
+
+To let network devices authenticate users against Wren:AM instead, see xref:radius-server.adoc[].
+
+
+== Configuration
+
+Create a module instance of type *RADIUS* in a realm under menu:Authentication[Modules].
+Every Wren:AM server must be configured as a client on the RADIUS servers, with the same shared secret as the module.
+
+[cols="2,1,4"]
+|===
+|Setting |Default |Description
+
+|Primary Radius Servers
+|`127.0.0.1`
+|The RADIUS servers used for authentication, in order of preference.
+See <<servers>> for the format of the entries.
+
+|Secondary Radius Servers
+|`127.0.0.1`
+|The RADIUS servers used when no primary server is available.
+
+|Shared Secret
+|
+|The secret shared with the RADIUS servers.
+It protects the password in requests and authenticates the responses, so a wrong secret makes every response invalid.
+
+|Port Number
+|`1645`
+|The port used for servers that are listed without a port.
+The port assigned to RADIUS authentication by RFC 2865 is 1812; 1645 is a historical port that some servers still use.
+
+|Timeout
+|`3`
+|How long to wait for a valid response from a server, in seconds.
+
+|Health check interval
+|`5`
+|How often an offline server is checked, in minutes.
+See <<failover>>.
+
+|Health check type
+|Access-Request
+|How an offline server is checked: Access-Request, Status-Server or None.
+See <<health-check>>.
+
+|Require Message-Authenticator
+|Disabled
+|Discard responses that do not carry a Message-Authenticator attribute.
+
+|Authentication Level
+|`0`
+|The authentication level of the module instance.
+|===
+
+[NOTE]
+====
+The Message-Authenticator attribute (https://www.rfc-editor.org/rfc/rfc3579.html#section-3.2[RFC 3579]) protects the integrity of a whole RADIUS packet.
+Without it, an attacker who can intercept the traffic between Wren:AM and a RADIUS server can forge a response and turn a rejected login into an accepted one (CVE-2024-3596, "Blast-RADIUS").
+
+The module always adds a Message-Authenticator to its requests and always verifies it in responses that carry one.
+*Require Message-Authenticator* additionally discards responses without it.
+Enable it once all configured RADIUS servers include the attribute in their responses.
+A server that does not include it can no longer authenticate anyone: its responses are discarded, so it appears not to respond and is marked offline.
+====
+
+
+[[servers]]
+=== Server entries
+
+Each entry of *Primary Radius Servers* and *Secondary Radius Servers* is a host name or IP address, optionally followed by a port, for example `radius1.example.com:1812`.
+Entries without a port use the *Port Number* setting.
+
+In a deployment with several Wren:AM servers, an entry can be prefixed with the name of a Wren:AM server, as listed under menu:Deployment[Servers], and the `|` character:
+
+.Example of server entries for two Wren:AM servers
+----
+https://am1.example.com:443/auth|radius1.example.com:1812
+https://am2.example.com:443/auth|radius2.example.com:1812
+----
+
+Each Wren:AM server tries the entries prefixed with its own name first, then the entries without a prefix, then the entries for other Wren:AM servers.
+This lets each Wren:AM server prefer a nearby RADIUS server while keeping the others as a fallback.
+
+
+== Login stages
+
+The module asks for a user name and a password and sends them to the RADIUS server.
+If the server answers with an Access-Challenge, the module shows a second stage that asks for a challenge response, displaying the server's message, for example a prompt for a one-time password.
+The response is sent back to the server, which can accept, reject or challenge again.
+
+Passwords and challenge responses can be at most 240 bytes long in UTF-8, the most that fits into the RADIUS User-Password attribute.
+Longer passwords fail the login without contacting the RADIUS server.
+
+
+[[failover]]
+== Failover
+
+For each login, the module uses the first primary server that is online, or the first online secondary server if no primary server is online.
+A server that does not send a valid response within the timeout is marked offline and the login continues with the next online server.
+If no server is online, the login fails.
+
+A server does not respond when it is unreachable, for example because a firewall blocks UDP traffic to the RADIUS port, or when it does not accept requests from Wren:AM, for example because the Wren:AM server is not configured as its client.
+A response is valid only if it comes from the server's address and port, answers the request that was sent, and is authenticated with the shared secret.
+Invalid responses are discarded and recorded in the `amAuthRadius` debug log, so a server with a wrong shared secret appears not to respond and is marked offline.
+
+The offline status is kept by each Wren:AM server and applies to all module instances and realms that use the same RADIUS server.
+An offline server is not used until the health check finds it available again.
+Primary servers that become available again are preferred over secondary servers.
+
+
+[[health-check]]
+=== Health check
+
+When a server is marked offline, Wren:AM checks it immediately and then once every health check interval until it is available again.
+The *Health check type* setting selects the check:
+
+Status-Server::
+Sends a Status-Server request (https://www.rfc-editor.org/rfc/rfc5997.html[RFC 5997]), which asks the RADIUS server whether it is alive without authenticating anyone.
+This is the recommended check for RADIUS servers that support it, such as the Wren:AM xref:radius-server.adoc[RADIUS server] or FreeRADIUS with the `status_server` option enabled.
+A server that does not support Status-Server never answers, so it stays offline.
+
+Access-Request::
+Sends an Access-Request for the user `nonexistent`.
+The server is available if it answers with a valid Access-Accept, Access-Reject or Access-Challenge.
+The request usually appears on the RADIUS server as a failed login, which may be logged or reported by intrusion detection.
+This is the default, kept for compatibility with existing installations.
+
+None::
+Sends nothing.
+The server is used again once the health check interval has elapsed since it was marked offline, and the next login that uses it confirms whether it is available.
+If it still does not respond, that login waits for the timeout before continuing with the next server.
+
+With Status-Server and Access-Request, the response must be valid in the same way as responses to logins, including the shared secret and *Require Message-Authenticator*.
